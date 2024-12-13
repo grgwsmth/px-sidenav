@@ -1,0 +1,57 @@
+<!-- Intro -->
+<h1 class="f3 b">PX Sidenav</h1>
+<!-- warning
+	<div class="bg-washed-red ba b--red br2 pv2 ph4 mb3">
+		<p class="mb3 dark-red f6 copy">
+			You need to be certain how many parent links you're going to add before you start. If you
+			change the number (using the Select Dropdown) after you've started adding information
+			below, you'll lose the fields you've already completed.
+		</p>
+	</div>
+	-->
+<!-- /Intro -->
+
+<!-- Display fields based on Select value -->
+<!--
+const selectParents = document.getElementById("parent-links");
+selectParents.addEventListener("change", function () {
+	// Remove any existing fields before making new ones
+	// Find them
+	let parentLinkFields = document.querySelectorAll('[id^="parent-link-container-"]');
+	// If they exist, remove them before adding new ones
+	if (parentLinkFields.length > 0) {
+		for (let i = 0; i < parentLinkFields.length; i++) {
+			parentLinkFields[i].remove();
+		}
+	}
+	// Add new fields based on Select value
+	let selectParentsValue = selectParents.value;
+	addParentLinks(selectParentsValue);
+});
+function addParentLinks(n) {
+	for (let i = 0; i < n; i++) {
+		const newParentLinkField = document.createElement("div");
+		newParentLinkField.innerHTML = `
+		<div class="container">
+			<div class="flex-container" id="parent-link-container-${i}">
+				<div class="input-container">
+					<label class="p-label" for="parent-link-label-${i}">Parent ${i} link label</label>
+					<input class="p-input" type="text" placeholder="Link label" id="parent-link-label-${i}" />
+				</div>
+				<button class="button-add add-child-field-button" id="add-child-link-${i}">
+					Add child link
+				</button>
+			</div>
+		</div>
+		`;
+		let referenceElement = selectParents;
+		referenceElement.parentNode.insertBefore(
+			newParentLinkField,
+			referenceElement.nextSibling
+		);
+		// Run the function that will look for child addChildButtons and add an event for them
+		findAddChildFieldButtons();
+	}
+}
+-->
+<!-- Display fields based on Select value -->

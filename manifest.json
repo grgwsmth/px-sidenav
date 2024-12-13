@@ -1,5 +1,5 @@
 {
-  "name": "Petma Plugin",
+  "name": "PX Sidenav",
   "id": "1443037858425799880",
   "api": "1.0.0",
   "main": "code.js",
@@ -8,6 +8,9 @@
   "documentAccess": "dynamic-page",
   "editorType": [
     "figma"
+  ],
+  "permissions": [
+    "teamlibrary"
   ],
   "ui": "ui.html",
   "networkAccess": {
