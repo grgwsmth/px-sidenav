@@ -62,20 +62,6 @@ figma.ui.onmessage = async (msg) => {
 
 async function createNavigation(data: NavData) {
 	try {
-		// Create a frame for the entire navigation
-		const navFrame = figma.createFrame();
-		navFrame.name = "PX Side Nav";
-		navFrame.layoutMode = "VERTICAL";
-		navFrame.counterAxisSizingMode = "FIXED";
-		const currentHeight = navFrame.height; // store current height
-		navFrame.resize(240, currentHeight);   // set width to 240, keep same height
-		navFrame.itemSpacing = 0;
-		navFrame.paddingTop = 0;
-		navFrame.paddingRight = 0;
-		navFrame.paddingBottom = 0;
-		navFrame.paddingLeft = 0;
-		navFrame.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }];
-
 		// Load required fonts first
 		await figma.loadFontAsync({ family: "Everyday Sans UI", style: "Regular" });
 		await figma.loadFontAsync({ family: "Everyday Sans UI", style: "Medium" });
@@ -88,16 +74,19 @@ async function createNavigation(data: NavData) {
 			throw new Error('Required components not found in library');
 		}
 
-		// Create parent items
+		const createdComponents: ComponentNode[] = [];
+
+		// Create separate components for each parent
 		for (const parent of data.parents) {
-			// Create a frame for this parent section
-			const parentFrame = figma.createFrame();
-			parentFrame.name = `${parent.label} Section`;
-			parentFrame.layoutMode = "VERTICAL";
-			parentFrame.counterAxisSizingMode = "AUTO";
-			parentFrame.layoutAlign = "STRETCH";
-			parentFrame.itemSpacing = 0;
-			parentFrame.fills = [];
+			// Create a component for this parent section
+			const parentComponent = figma.createComponent();
+			parentComponent.name = `${parent.label} Navigation Group`;
+			parentComponent.layoutMode = "VERTICAL";
+			parentComponent.counterAxisSizingMode = "FIXED";
+			parentComponent.resize(240, parentComponent.height); // set width to 240
+			parentComponent.layoutAlign = "STRETCH";
+			parentComponent.itemSpacing = 0;
+			parentComponent.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }];
 
 			// Create parent instance
 			const parentInstance = parentComponent.createInstance();
@@ -109,8 +98,8 @@ async function createNavigation(data: NavData) {
 				parentTextNode.characters = parent.label;
 			}
 
-			// Add parent instance to its frame
-			parentFrame.appendChild(parentInstance);
+			// Add parent instance to the component
+			parentComponent.appendChild(parentInstance);
 
 			// Create children if they exist
 			if (parent.children && parent.children.length > 0) {
@@ -137,26 +126,32 @@ async function createNavigation(data: NavData) {
 					childrenFrame.appendChild(childInstance);
 				}
 
-				// Add children frame to parent frame
-				parentFrame.appendChild(childrenFrame);
+				// Add children frame to the component
+				parentComponent.appendChild(childrenFrame);
 			}
 
-			// Add the parent frame to main navigation frame
-			navFrame.appendChild(parentFrame);
-			createdNodes[parent.id] = parentFrame;
+			// Add the component to the page
+			figma.currentPage.appendChild(parentComponent);
+			createdComponents.push(parentComponent);
+			createdNodes[parent.id] = parentComponent;
 		}
 
-		// Add the navigation to the page
-		figma.currentPage.appendChild(navFrame);
+		// Arrange components vertically with some spacing
+		let yPosition = 0;
+		const spacing = 40; // Space between components
+		createdComponents.forEach(component => {
+			component.y = yPosition;
+			yPosition += component.height + spacing;
+		});
 
-		// Select the navigation frame
-		figma.currentPage.selection = [navFrame];
+		// Select all created components
+		figma.currentPage.selection = createdComponents;
 
-		// Zoom to the navigation
-		figma.viewport.scrollAndZoomIntoView([navFrame]);
+		// Zoom to fit all components
+		figma.viewport.scrollAndZoomIntoView(createdComponents);
 
 		// Notify completion
-		figma.notify("You're Side Nav component is ready! 🎉");
+		figma.notify(`Created ${createdComponents.length} navigation components! 🎉`);
 	} catch (error) {
 		console.error('Error creating navigation:', error);
 		figma.notify("Error: Could not create navigation. Check console for details.", { error: true });
