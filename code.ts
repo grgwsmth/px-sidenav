@@ -67,10 +67,10 @@ async function createNavigation(data: NavData) {
 		await figma.loadFontAsync({ family: "Everyday Sans UI", style: "Medium" });
 
 		// Get the component references
-		const parentComponent = await figma.importComponentByKeyAsync(COMPONENT_KEYS.PARENT_LINK);
-		const childComponent = await figma.importComponentByKeyAsync(COMPONENT_KEYS.CHILD_LINK);
+		const parentLinkComponent = await figma.importComponentByKeyAsync(COMPONENT_KEYS.PARENT_LINK);
+		const childLinkComponent = await figma.importComponentByKeyAsync(COMPONENT_KEYS.CHILD_LINK);
 
-		if (!parentComponent || !childComponent) {
+		if (!parentLinkComponent || !childLinkComponent) {
 			throw new Error('Required components not found in library');
 		}
 
@@ -78,18 +78,18 @@ async function createNavigation(data: NavData) {
 
 		// Create separate components for each parent
 		for (const parent of data.parents) {
-			// Create a component for this parent section
-			const parentComponent = figma.createComponent();
-			parentComponent.name = `${parent.label} Navigation Group`;
-			parentComponent.layoutMode = "VERTICAL";
-			parentComponent.counterAxisSizingMode = "FIXED";
-			parentComponent.resize(240, parentComponent.height); // set width to 240
-			parentComponent.layoutAlign = "STRETCH";
-			parentComponent.itemSpacing = 0;
-			parentComponent.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }];
+			// Create a frame first
+			const navFrame = figma.createFrame();
+			navFrame.name = `${parent.label} Navigation Group`;
+			navFrame.layoutMode = "VERTICAL";
+			navFrame.counterAxisSizingMode = "FIXED";
+			navFrame.resize(240, navFrame.height); // set width to 240
+			navFrame.layoutAlign = "STRETCH";
+			navFrame.itemSpacing = 0;
+			navFrame.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }];
 
-			// Create parent instance
-			const parentInstance = parentComponent.createInstance();
+			// Create parent instance from the library component
+			const parentInstance = parentLinkComponent.createInstance();
 			parentInstance.layoutAlign = "STRETCH";
 
 			// Set the text property if it exists
@@ -98,8 +98,8 @@ async function createNavigation(data: NavData) {
 				parentTextNode.characters = parent.label;
 			}
 
-			// Add parent instance to the component
-			parentComponent.appendChild(parentInstance);
+			// Add parent instance to the frame
+			navFrame.appendChild(parentInstance);
 
 			// Create children if they exist
 			if (parent.children && parent.children.length > 0) {
@@ -113,8 +113,8 @@ async function createNavigation(data: NavData) {
 				childrenFrame.fills = [];
 
 				for (const child of parent.children) {
-					// Create child instance
-					const childInstance = childComponent.createInstance();
+					// Create child instance from the library component
+					const childInstance = childLinkComponent.createInstance();
 					childInstance.layoutAlign = "STRETCH";
 
 					// Set the text property if it exists
@@ -126,14 +126,32 @@ async function createNavigation(data: NavData) {
 					childrenFrame.appendChild(childInstance);
 				}
 
-				// Add children frame to the component
-				parentComponent.appendChild(childrenFrame);
+				// Add children frame to the navigation frame
+				navFrame.appendChild(childrenFrame);
 			}
 
+			// Convert the frame to a component
+			const newComponent = figma.createComponent();
+			newComponent.name = navFrame.name;
+			newComponent.resize(navFrame.width, navFrame.height);
+			newComponent.layoutMode = navFrame.layoutMode;
+			newComponent.counterAxisSizingMode = navFrame.counterAxisSizingMode;
+			newComponent.layoutAlign = navFrame.layoutAlign;
+			newComponent.itemSpacing = navFrame.itemSpacing;
+			newComponent.fills = navFrame.fills;
+
+			// Move all children from frame to component
+			while (navFrame.children.length > 0) {
+				newComponent.appendChild(navFrame.children[0]);
+			}
+
+			// Remove the temporary frame
+			navFrame.remove();
+
 			// Add the component to the page
-			figma.currentPage.appendChild(parentComponent);
-			createdComponents.push(parentComponent);
-			createdNodes[parent.id] = parentComponent;
+			figma.currentPage.appendChild(newComponent);
+			createdComponents.push(newComponent);
+			createdNodes[parent.id] = newComponent;
 		}
 
 		// Arrange components vertically with some spacing

@@ -15,7 +15,9 @@
   "ui": "ui.html",
   "networkAccess": {
     "allowedDomains": [
-      "https://s3-us-west-2.amazonaws.com"
+      "https://s3-us-west-2.amazonaws.com",
+      "https://fonts.googleapis.com",
+      "https://fonts.gstatic.com"
     ]
   }
 }
