@@ -30,6 +30,7 @@ interface VariantProperty {
 	variantOptions?: string[];
 }
 
+// Imports a component by its key, returns null if not found
 async function getComponent(key: string): Promise<ComponentNode | null> {
 	try {
 		return await figma.importComponentByKeyAsync(key);
@@ -39,6 +40,7 @@ async function getComponent(key: string): Promise<ComponentNode | null> {
 	}
 }
 
+// Handles all UI messages and triggers appropriate actions
 figma.ui.onmessage = async (msg) => {
 	switch (msg.type) {
 		case 'add-parent':
@@ -66,16 +68,18 @@ figma.ui.onmessage = async (msg) => {
 	}
 };
 
-// Helper function to log component properties
+// Logs detailed information about a component's properties and variants
 async function logComponentProperties(component: ComponentNode | InstanceNode) {
+	// Handle instance properties
 	if (component.type === "INSTANCE") {
 		console.log('Instance Properties:', {
 			name: component.name,
 			componentProperties: component.componentProperties,
 			variantProperties: component.variantProperties
 		});
-	} else if (component.type === "COMPONENT") {
-		// For component variants, get the parent component set if it exists
+	} 
+	// Handle component properties
+	else if (component.type === "COMPONENT") {
 		const mainComponent = component.parent?.type === "COMPONENT_SET" ? component.parent : component;
 		console.log('Component Properties:', {
 			name: component.name,
@@ -85,13 +89,14 @@ async function logComponentProperties(component: ComponentNode | InstanceNode) {
 	}
 }
 
+// Creates a complete navigation system with parent and child components
 async function createNavigation(data: NavData) {
 	try {
-		// Load required fonts first
+		// Load required fonts
 		await figma.loadFontAsync({ family: "Everyday Sans UI", style: "Regular" });
 		await figma.loadFontAsync({ family: "Everyday Sans UI", style: "Medium" });
 
-		// Get the component references
+		// Import required components
 		const parentLinkComponent = await figma.importComponentByKeyAsync(COMPONENT_KEYS.PARENT_LINK);
 		const childLinkComponent = await figma.importComponentByKeyAsync(COMPONENT_KEYS.CHILD_LINK);
 
@@ -103,11 +108,11 @@ async function createNavigation(data: NavData) {
 		let yPosition = 0;
 		const createdComponentSets: ComponentSetNode[] = [];
 
-		// Create frames for each parent
+		// Create frames for each parent and their children
 		for (const parent of data.parents) {
 			const parentFrames: FrameNode[] = [];
 
-			// Create a frame for this parent (default state)
+			// Create default parent frame
 			const parentDefaultFrame = figma.createFrame();
 			parentDefaultFrame.name = `Variant=${parent.label}`;
 			parentDefaultFrame.layoutMode = "VERTICAL";
@@ -132,7 +137,7 @@ async function createNavigation(data: NavData) {
 			parentDefaultFrame.appendChild(parentDefaultInstance);
 			parentFrames.push(parentDefaultFrame);
 
-			// If there are children, create parent current variant first
+			// Create variants for parent with children
 			if (parent.children && parent.children.length > 0) {
 				// Create parent current variant with all children not current
 				const parentCurrentFrame = figma.createFrame();
@@ -203,7 +208,7 @@ async function createNavigation(data: NavData) {
 					}
 					childFrame.appendChild(parentInst);
 
-					// Add all children
+					// Add all children with current state
 					parent.children.forEach((child, index) => {
 						const childInstance = childLinkComponent.createInstance();
 						childInstance.layoutAlign = "STRETCH";
@@ -225,7 +230,7 @@ async function createNavigation(data: NavData) {
 				});
 			}
 
-			// Position frames horizontally for this parent's component set
+			// Position frames horizontally
 			parentFrames.forEach((frame, index) => {
 				frame.x = index * (frame.width + spacing);
 				frame.y = 0;
@@ -234,19 +239,16 @@ async function createNavigation(data: NavData) {
 			// Convert frames to components
 			const components: ComponentNode[] = parentFrames.map(frame => {
 				const component = figma.createComponent();
-				// Copy all properties from frame to component
 				component.name = frame.name;
 				component.resize(frame.width, frame.height);
 				component.layoutMode = frame.layoutMode;
 				component.counterAxisSizingMode = frame.counterAxisSizingMode;
 				component.itemSpacing = frame.itemSpacing;
 				
-				// Move all children from frame to component
 				while (frame.children.length > 0) {
 					component.appendChild(frame.children[0]);
 				}
 				
-				// Remove the original frame
 				frame.remove();
 				
 				return component;
@@ -254,21 +256,20 @@ async function createNavigation(data: NavData) {
 
 			let finalNode: ComponentNode | ComponentSetNode;
 
-			// Only create a component set if there are multiple variants (i.e., has children)
+			// Create component set or use single component
 			if (components.length > 1) {
-				// Create component set for this parent
+				// Create and style component set
 				const componentSet = figma.combineAsVariants(components, figma.currentPage);
 				componentSet.name = `${parent.label} group`;
 				componentSet.layoutMode = "HORIZONTAL";
 				componentSet.counterAxisSizingMode = "AUTO";
-				// componentSet.fills = [];
 				
-				// Add dashed stroke and auto-layout spacing
-				componentSet.itemSpacing = 16; // Horizontal gap between objects
-				componentSet.paddingLeft = 16; // Horizontal padding
-				componentSet.paddingRight = 16; // Horizontal padding
-				componentSet.paddingTop = 16; // Vertical padding
-				componentSet.paddingBottom = 16; // Vertical padding
+				// Add spacing and padding
+				componentSet.itemSpacing = 16;
+				componentSet.paddingLeft = 16;
+				componentSet.paddingRight = 16;
+				componentSet.paddingTop = 16;
+				componentSet.paddingBottom = 16;
 
 				// Add dashed stroke
 				componentSet.strokes = [{
@@ -285,7 +286,6 @@ async function createNavigation(data: NavData) {
 
 				finalNode = componentSet;
 			} else {
-				// Just use the single component
 				finalNode = components[0];
 			}
 
@@ -296,7 +296,7 @@ async function createNavigation(data: NavData) {
 			createdComponentSets.push(finalNode as ComponentSetNode);
 		}
 
-		// Create a frame containing instances of the first variant from each component set
+		// Create main navigation frame
 		const instancesFrame = figma.createFrame();
 		instancesFrame.name = "MySideNav";
 		instancesFrame.layoutMode = "VERTICAL";
@@ -310,7 +310,7 @@ async function createNavigation(data: NavData) {
 		instancesFrame.primaryAxisSizingMode = "AUTO";
 		instancesFrame.counterAxisSizingMode = "FIXED";
 
-		// Position the instances frame to the right of the component sets
+		// Position frame
 		let maxX = 0;
 		createdComponentSets.forEach(set => {
 			maxX = Math.max(maxX, set.x + set.width);
@@ -318,14 +318,12 @@ async function createNavigation(data: NavData) {
 		instancesFrame.x = maxX + spacing;
 		instancesFrame.y = 0;
 
-		// Add initial parent instance at the top
+		// Add home link
 		const topParentInstance = parentLinkComponent.createInstance();
 		if (topParentInstance.type === "INSTANCE") {
 			topParentInstance.layoutAlign = "STRETCH";
-			// Set text
 			const textNode = topParentInstance.findOne(node => node.type === "TEXT") as TextNode;
 			if (textNode) textNode.characters = "Home";
-			// Set properties
 			topParentInstance.setProperties({
 				"Variant": "Parent",
 				"isCurrent": "False"
@@ -333,17 +331,17 @@ async function createNavigation(data: NavData) {
 		}
 		instancesFrame.appendChild(topParentInstance);
 
-		// Add an instance of the first variant from each component set
+		// Add component instances
 		createdComponentSets.forEach(componentSet => {
 			const firstVariant = componentSet.children[0] as ComponentNode;
 			const instance = firstVariant.createInstance();
 			if (instance.type === "INSTANCE") {
-				instance.layoutAlign = "STRETCH";  // Set to Fill container width
+				instance.layoutAlign = "STRETCH";
 			}
 			instancesFrame.appendChild(instance);
 		});
 
-		// Convert the frame to a component
+		// Create final navigation component
 		const navComponent = figma.createComponent();
 		navComponent.name = "MySideNav";
 		navComponent.resize(240, instancesFrame.height);
@@ -354,35 +352,30 @@ async function createNavigation(data: NavData) {
 		navComponent.paddingTop = 0;
 		navComponent.paddingBottom = 0;
 		navComponent.fills = [];
-		navComponent.primaryAxisSizingMode = "AUTO";     // Hug height
-		navComponent.counterAxisSizingMode = "FIXED";    // Fixed width
+		navComponent.primaryAxisSizingMode = "AUTO";
+		navComponent.counterAxisSizingMode = "FIXED";
 
-		// Move all instances from the frame to the component
+		// Transfer instances to component
 		while (instancesFrame.children.length > 0) {
 			const child = instancesFrame.children[0];
 			if (child.type === "INSTANCE") {
-				child.layoutAlign = "STRETCH";  // Ensure Fill setting is maintained
+				child.layoutAlign = "STRETCH";
 			}
 			navComponent.appendChild(child);
 		}
 
-		// Position the component where the frame was
 		navComponent.x = instancesFrame.x;
 		navComponent.y = instancesFrame.y;
-
-		// Remove the original frame
 		instancesFrame.remove();
 
-		// Create an instance of MySideNav
+		// Create wrapper component
 		const mySideNavInstance = navComponent.createInstance();
-		
-		// Create the wrapper frame and set it up as a component
 		const wrapperComponent = figma.createComponent();
 		wrapperComponent.name = "[PX] SideNav-MySideNav";
 		wrapperComponent.layoutMode = "VERTICAL";
 		wrapperComponent.resize(240, wrapperComponent.height);
-		wrapperComponent.primaryAxisSizingMode = "AUTO";     // Hug height
-		wrapperComponent.counterAxisSizingMode = "FIXED";    // Fixed width
+		wrapperComponent.primaryAxisSizingMode = "AUTO";
+		wrapperComponent.counterAxisSizingMode = "FIXED";
 		wrapperComponent.itemSpacing = 0;
 		wrapperComponent.paddingLeft = 0;
 		wrapperComponent.paddingRight = 0;
@@ -390,20 +383,15 @@ async function createNavigation(data: NavData) {
 		wrapperComponent.paddingBottom = 0;
 		wrapperComponent.fills = [];
 
-		// Add the MySideNav instance to the wrapper and set it to Fill
 		if (mySideNavInstance.type === "INSTANCE") {
 			mySideNavInstance.layoutAlign = "STRETCH";
 		}
 		wrapperComponent.appendChild(mySideNavInstance);
-
-		// Position the wrapper component
 		wrapperComponent.x = navComponent.x + navComponent.width + spacing;
 		wrapperComponent.y = 0;
 
-		// Update selection to include the new wrapper component
+		// Update selection and notify completion
 		figma.currentPage.selection = [...createdComponentSets, navComponent, wrapperComponent];
-
-		// Update completion message
 		figma.notify(`Created ${createdComponentSets.length} navigation components and assembled them into a navigation system! 🎉`);
 	} catch (error) {
 		console.error('Error creating navigation:', error);
@@ -411,8 +399,9 @@ async function createNavigation(data: NavData) {
 	}
 }
 
-// Debug helper to inspect component properties
+// Debug helper function to inspect and log component properties and structure
 async function inspectSelectedComponent() {
+	// Check if component is selected
 	if (figma.currentPage.selection.length === 0) {
 		console.log('Please select a component instance');
 		return;
@@ -424,20 +413,20 @@ async function inspectSelectedComponent() {
 		return;
 	}
 
-	// Basic instance properties
+	// Log basic properties
 	console.log('Instance Properties:', {
 		name: selected.name,
 		type: selected.type,
 		id: selected.id
 	});
 
-	// Get variant properties
+	// Log variant properties
 	console.log('Variant Properties:', {
 		variantProperties: selected.variantProperties,
 		componentProperties: selected.componentProperties
 	});
 
-	// Get text nodes
+	// Log text nodes
 	const textNodes = selected.findAll(node => node.type === "TEXT");
 	console.log('Text Nodes:', textNodes.map(node => {
 		if (node.type === "TEXT") {
@@ -451,7 +440,7 @@ async function inspectSelectedComponent() {
 		};
 	}));
 
-	// Get main component info
+	// Log main component info
 	const mainComponent = await selected.getMainComponentAsync();
 	if (mainComponent) {
 		console.log('Main Component:', {
