@@ -1,9 +1,10 @@
-// Show UI and set size
+// Initialize Figma plugin UI with a 600x800 window size
 figma.showUI(__html__);
 
 figma.ui.resize(600,800);
 
-// Track our navigation components
+// Define the structure for navigation data. Each parent can have multiple children,
+// and both parents and children have unique IDs and display labels
 interface NavData {
 	parents: Array<{
 		id: string;
@@ -15,22 +16,27 @@ interface NavData {
 	}>;
 }
 
-// Component keys for the navigation elements
+// Store component keys for reuse. These keys map to existing components in your Figma library
+// that will be used as templates for creating navigation elements
 const COMPONENT_KEYS = {
 	PARENT_LINK: "13c44fe13f8dde5e2b71e7396b8cec831e61113d",
 	CHILD_LINK: "24def9ec4389e2bb91bc2d29298a608e3bf9d7cd"
 };
 
-// Keep track of created nodes
+// Object that maps node IDs to their SceneNode instances. This gets populated
+// as new nodes are created and is used to reference them later for updates
 const createdNodes: { [key: string]: SceneNode } = {};
 
-// Add type definitions at the top
+// Define the structure for component variants. Used to specify
+// the type of variant and its possible options when creating components
 interface VariantProperty {
 	type: string;
 	variantOptions?: string[];
 }
 
-// Imports a component by its key, returns null if not found
+// Fetches a component from Figma's library using its key. Returns null if
+// the component doesn't exist or can't be imported. Used to get the base
+// components for creating navigation elements
 async function getComponent(key: string): Promise<ComponentNode | null> {
 	try {
 		return await figma.importComponentByKeyAsync(key);
@@ -40,7 +46,10 @@ async function getComponent(key: string): Promise<ComponentNode | null> {
 	}
 }
 
-// Handles all UI messages and triggers appropriate actions
+// Listens for messages from the UI and handles different actions.
+// Each case in the switch statement corresponds to a different UI action:
+// - add/remove parents and children
+// - create the full navigation system
 figma.ui.onmessage = async (msg) => {
 	switch (msg.type) {
 		case 'add-parent':
@@ -68,9 +77,13 @@ figma.ui.onmessage = async (msg) => {
 	}
 };
 
-// Logs detailed information about a component's properties and variants
+// Inspects and logs the properties of a component or instance.
+// Used for debugging to understand the structure and state of components.
+// Handles both standalone components and instances differently:
+// - For instances: logs instance-specific properties and variant information
+// - For components: logs component definition and variant properties
 async function logComponentProperties(component: ComponentNode | InstanceNode) {
-	// Handle instance properties
+	// For instances, log their current state and properties
 	if (component.type === "INSTANCE") {
 		console.log('Instance Properties:', {
 			name: component.name,
@@ -78,7 +91,7 @@ async function logComponentProperties(component: ComponentNode | InstanceNode) {
 			variantProperties: component.variantProperties
 		});
 	} 
-	// Handle component properties
+	// For components, log their definition and variant structure
 	else if (component.type === "COMPONENT") {
 		const mainComponent = component.parent?.type === "COMPONENT_SET" ? component.parent : component;
 		console.log('Component Properties:', {
@@ -89,14 +102,20 @@ async function logComponentProperties(component: ComponentNode | InstanceNode) {
 	}
 }
 
-// Creates a complete navigation system with parent and child components
+// Main function that builds the entire navigation system.
+// Takes the navigation data and creates a hierarchical component structure:
+// 1. Creates parent and child components with variants
+// 2. Assembles them into a component set
+// 3. Creates a final wrapped navigation component ready for use
 async function createNavigation(data: NavData) {
 	try {
-		// Load required fonts
+		// Load fonts needed for text elements. Must be done before
+		// creating any text nodes to avoid rendering issues
 		await figma.loadFontAsync({ family: "Everyday Sans UI", style: "Regular" });
 		await figma.loadFontAsync({ family: "Everyday Sans UI", style: "Medium" });
 
-		// Import required components
+		// Get the base components that will be used as templates.
+		// These components must exist in your library for the plugin to work
 		const parentLinkComponent = await figma.importComponentByKeyAsync(COMPONENT_KEYS.PARENT_LINK);
 		const childLinkComponent = await figma.importComponentByKeyAsync(COMPONENT_KEYS.CHILD_LINK);
 
@@ -108,11 +127,16 @@ async function createNavigation(data: NavData) {
 		let yPosition = 0;
 		const createdComponentSets: ComponentSetNode[] = [];
 
-		// Create frames for each parent and their children
+		// Iterate through each parent in the data and create its component structure.
+		// For each parent:
+		// 1. Create a default state
+		// 2. Create a current state if it has children
+		// 3. Create states for each active child
 		for (const parent of data.parents) {
 			const parentFrames: FrameNode[] = [];
 
-			// Create default parent frame
+			// Create the default state frame for the parent.
+			// This is the basic state when nothing is selected
 			const parentDefaultFrame = figma.createFrame();
 			parentDefaultFrame.name = `Variant=${parent.label}`;
 			parentDefaultFrame.layoutMode = "VERTICAL";
@@ -120,15 +144,15 @@ async function createNavigation(data: NavData) {
 			parentDefaultFrame.resize(240, parentDefaultFrame.height);
 			parentDefaultFrame.itemSpacing = 4;
 
-			// Add parent instance (not current)
+			// Add the parent instance in its default state
 			const parentDefaultInstance = parentLinkComponent.createInstance();
 			parentDefaultInstance.layoutAlign = "STRETCH";
 			if (parentDefaultInstance.type === "INSTANCE") {
-				// Set text
+				// Set the label text for the parent
 				const textNode = parentDefaultInstance.findOne(node => node.type === "TEXT") as TextNode;
 				if (textNode) textNode.characters = parent.label;
 
-				// Set properties for parent variant
+				// Configure the parent instance properties
 				parentDefaultInstance.setProperties({
 					"Variant": "Parent",
 					"isCurrent": "False"
@@ -137,9 +161,11 @@ async function createNavigation(data: NavData) {
 			parentDefaultFrame.appendChild(parentDefaultInstance);
 			parentFrames.push(parentDefaultFrame);
 
-			// Create variants for parent with children
+			// If this parent has children, create additional states:
+			// 1. Parent selected with children visible
+			// 2. Each child selected state
 			if (parent.children && parent.children.length > 0) {
-				// Create parent current variant with all children not current
+				// Create the frame for when parent is selected
 				const parentCurrentFrame = figma.createFrame();
 				parentCurrentFrame.name = `Variant=${parent.label} Current`;
 				parentCurrentFrame.layoutMode = "VERTICAL";
@@ -147,15 +173,15 @@ async function createNavigation(data: NavData) {
 				parentCurrentFrame.resize(240, parentCurrentFrame.height);
 				parentCurrentFrame.itemSpacing = 4;
 
-				// Add parent instance (current)
+				// Add parent instance in selected state
 				const parentCurrentInstance = parentLinkComponent.createInstance();
 				parentCurrentInstance.layoutAlign = "STRETCH";
 				if (parentCurrentInstance.type === "INSTANCE") {
-					// Set text
+					// Set the parent's label
 					const textNode = parentCurrentInstance.findOne(node => node.type === "TEXT") as TextNode;
 					if (textNode) textNode.characters = parent.label;
 
-					// Set properties for parent variant
+					// Configure the parent as selected
 					parentCurrentInstance.setProperties({
 						"Variant": "Parent",
 						"isCurrent": "True"
@@ -163,16 +189,16 @@ async function createNavigation(data: NavData) {
 				}
 				parentCurrentFrame.appendChild(parentCurrentInstance);
 
-				// Add all children (not current)
+				// Add all child links in their default state
 				parent.children.forEach(child => {
 					const childInstance = childLinkComponent.createInstance();
 					childInstance.layoutAlign = "STRETCH";
 					if (childInstance.type === "INSTANCE") {
-						// Set text
+						// Set the child's label
 						const textNode = childInstance.findOne(node => node.type === "TEXT") as TextNode;
 						if (textNode) textNode.characters = child.label;
 
-						// Set properties for child instance
+						// Configure the child as not selected
 						childInstance.setProperties({
 							"Variant": "Child",
 							"isCurrent": "False"
@@ -183,7 +209,7 @@ async function createNavigation(data: NavData) {
 
 				parentFrames.push(parentCurrentFrame);
 
-				// Create variants for each active child
+				// Create frames for each child being selected
 				parent.children.forEach((activeChild, activeChildIndex) => {
 					const childFrame = figma.createFrame();
 					childFrame.name = `Variant=${activeChild.label}`;
@@ -192,15 +218,15 @@ async function createNavigation(data: NavData) {
 					childFrame.resize(240, childFrame.height);
 					childFrame.itemSpacing = 4;
 
-					// Add parent instance (not current)
+					// Add parent in non-selected state
 					const parentInst = parentLinkComponent.createInstance();
 					parentInst.layoutAlign = "STRETCH";
 					if (parentInst.type === "INSTANCE") {
-						// Set text
+						// Set parent's label
 						const textNode = parentInst.findOne(node => node.type === "TEXT") as TextNode;
 						if (textNode) textNode.characters = parent.label;
 
-						// Set properties for parent in child variant
+						// Configure parent as not selected
 						parentInst.setProperties({
 							"Variant": "Parent",
 							"isCurrent": "False"
@@ -208,16 +234,16 @@ async function createNavigation(data: NavData) {
 					}
 					childFrame.appendChild(parentInst);
 
-					// Add all children with current state
+					// Add all children, with the active child selected
 					parent.children.forEach((child, index) => {
 						const childInstance = childLinkComponent.createInstance();
 						childInstance.layoutAlign = "STRETCH";
 						if (childInstance.type === "INSTANCE") {
-							// Set text
+							// Set child's label
 							const textNode = childInstance.findOne(node => node.type === "TEXT") as TextNode;
 							if (textNode) textNode.characters = child.label;
 
-							// Set properties for child instance
+							// Configure child's selected state based on whether it's the active one
 							childInstance.setProperties({
 								"Variant": "Child",
 								"isCurrent": index === activeChildIndex ? "True" : "False"
@@ -230,13 +256,13 @@ async function createNavigation(data: NavData) {
 				});
 			}
 
-			// Position frames horizontally
+			// Arrange all frames horizontally with spacing
 			parentFrames.forEach((frame, index) => {
 				frame.x = index * (frame.width + spacing);
 				frame.y = 0;
 			});
 
-			// Convert frames to components
+			// Convert all frames to components, preserving their properties
 			const components: ComponentNode[] = parentFrames.map(frame => {
 				const component = figma.createComponent();
 				component.name = frame.name;
@@ -256,22 +282,23 @@ async function createNavigation(data: NavData) {
 
 			let finalNode: ComponentNode | ComponentSetNode;
 
-			// Create component set or use single component
+			// If there are multiple states, combine them into a component set
+			// Otherwise, use the single component
 			if (components.length > 1) {
-				// Create and style component set
+				// Create a component set and configure its layout and styling
 				const componentSet = figma.combineAsVariants(components, figma.currentPage);
 				componentSet.name = `${parent.label} group`;
 				componentSet.layoutMode = "HORIZONTAL";
 				componentSet.counterAxisSizingMode = "AUTO";
 				
-				// Add spacing and padding
+				// Add consistent spacing around variants
 				componentSet.itemSpacing = 16;
 				componentSet.paddingLeft = 16;
 				componentSet.paddingRight = 16;
 				componentSet.paddingTop = 16;
 				componentSet.paddingBottom = 16;
 
-				// Add dashed stroke
+				// Add a purple dashed border to visually group variants
 				componentSet.strokes = [{
 					type: "SOLID",
 					color: { 
@@ -289,14 +316,15 @@ async function createNavigation(data: NavData) {
 				finalNode = components[0];
 			}
 
-			// Position vertically
+			// Stack component sets vertically
 			finalNode.y = yPosition;
 			yPosition += finalNode.height + spacing;
 
 			createdComponentSets.push(finalNode as ComponentSetNode);
 		}
 
-		// Create main navigation frame
+		// Create the main frame that will hold the actual navigation structure.
+		// This frame will contain instances of the components we created
 		const instancesFrame = figma.createFrame();
 		instancesFrame.name = "MySideNav";
 		instancesFrame.layoutMode = "VERTICAL";
@@ -310,7 +338,7 @@ async function createNavigation(data: NavData) {
 		instancesFrame.primaryAxisSizingMode = "AUTO";
 		instancesFrame.counterAxisSizingMode = "FIXED";
 
-		// Position frame
+		// Position the frame to the right of all component sets
 		let maxX = 0;
 		createdComponentSets.forEach(set => {
 			maxX = Math.max(maxX, set.x + set.width);
@@ -318,7 +346,7 @@ async function createNavigation(data: NavData) {
 		instancesFrame.x = maxX + spacing;
 		instancesFrame.y = 0;
 
-		// Add home link
+		// Add the home link at the top of the navigation
 		const topParentInstance = parentLinkComponent.createInstance();
 		if (topParentInstance.type === "INSTANCE") {
 			topParentInstance.layoutAlign = "STRETCH";
@@ -331,7 +359,7 @@ async function createNavigation(data: NavData) {
 		}
 		instancesFrame.appendChild(topParentInstance);
 
-		// Add component instances
+		// Add the default state of each navigation section
 		createdComponentSets.forEach(componentSet => {
 			const firstVariant = componentSet.children[0] as ComponentNode;
 			const instance = firstVariant.createInstance();
@@ -341,7 +369,7 @@ async function createNavigation(data: NavData) {
 			instancesFrame.appendChild(instance);
 		});
 
-		// Create final navigation component
+		// Convert the frame into a component for reuse
 		const navComponent = figma.createComponent();
 		navComponent.name = "MySideNav";
 		navComponent.resize(240, instancesFrame.height);
@@ -355,7 +383,7 @@ async function createNavigation(data: NavData) {
 		navComponent.primaryAxisSizingMode = "AUTO";
 		navComponent.counterAxisSizingMode = "FIXED";
 
-		// Transfer instances to component
+		// Move all instances to the component
 		while (instancesFrame.children.length > 0) {
 			const child = instancesFrame.children[0];
 			if (child.type === "INSTANCE") {
@@ -368,7 +396,7 @@ async function createNavigation(data: NavData) {
 		navComponent.y = instancesFrame.y;
 		instancesFrame.remove();
 
-		// Create wrapper component
+		// Create the final wrapped component that users will instance
 		const mySideNavInstance = navComponent.createInstance();
 		const wrapperComponent = figma.createComponent();
 		wrapperComponent.name = "[PX] SideNav-MySideNav";
@@ -390,7 +418,7 @@ async function createNavigation(data: NavData) {
 		wrapperComponent.x = navComponent.x + navComponent.width + spacing;
 		wrapperComponent.y = 0;
 
-		// Update selection and notify completion
+		// Select all created components and notify user
 		figma.currentPage.selection = [...createdComponentSets, navComponent, wrapperComponent];
 		figma.notify(`Created ${createdComponentSets.length} navigation components and assembled them into a navigation system! 🎉`);
 	} catch (error) {
@@ -399,9 +427,14 @@ async function createNavigation(data: NavData) {
 	}
 }
 
-// Debug helper function to inspect and log component properties and structure
+// Debug function that provides detailed information about a selected component.
+// Logs various aspects of the component:
+// - Basic properties (name, type, ID)
+// - Variant properties and states
+// - Text content
+// - Component hierarchy and relationships
 async function inspectSelectedComponent() {
-	// Check if component is selected
+	// Verify a component is selected
 	if (figma.currentPage.selection.length === 0) {
 		console.log('Please select a component instance');
 		return;
@@ -413,20 +446,20 @@ async function inspectSelectedComponent() {
 		return;
 	}
 
-	// Log basic properties
+	// Log the basic identifying information
 	console.log('Instance Properties:', {
 		name: selected.name,
 		type: selected.type,
 		id: selected.id
 	});
 
-	// Log variant properties
+	// Log the component's variant and property configurations
 	console.log('Variant Properties:', {
 		variantProperties: selected.variantProperties,
 		componentProperties: selected.componentProperties
 	});
 
-	// Log text nodes
+	// Log all text content within the component
 	const textNodes = selected.findAll(node => node.type === "TEXT");
 	console.log('Text Nodes:', textNodes.map(node => {
 		if (node.type === "TEXT") {
@@ -440,7 +473,7 @@ async function inspectSelectedComponent() {
 		};
 	}));
 
-	// Log main component info
+	// Log information about the original component this is an instance of
 	const mainComponent = await selected.getMainComponentAsync();
 	if (mainComponent) {
 		console.log('Main Component:', {
@@ -452,5 +485,5 @@ async function inspectSelectedComponent() {
 	}
 }
 
-// Run the inspection
+// Run the component inspection when the plugin starts
 inspectSelectedComponent();
