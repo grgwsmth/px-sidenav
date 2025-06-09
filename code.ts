@@ -401,6 +401,8 @@ async function createNavigation(data: NavData) {
 const mySideNavInstance = navComponent.createInstance();
 const sidenavControlInstance = await figma.importComponentByKeyAsync(COMPONENT_KEYS.SIDENAV_CONTROL);
 
+// We'll remove this instance later after we're done cloning it
+
 if (!sidenavControlInstance) {
     throw new Error('Required SIDENAV_CONTROL component not found in library');
 }
@@ -545,6 +547,9 @@ if (collapsedControlInstance.type === "INSTANCE") {
 }
 collapsedVariant.appendChild(collapsedControlInstance);
 
+// Remove the original instance since we've cloned it for both variants
+mySideNavInstance.remove();
+
 // Set the expanded variant width
 const expandedContentWidth = 240;
 const expandedTotalWidth = expandedContentWidth + expandedVariant.paddingLeft + expandedVariant.paddingRight;
@@ -556,12 +561,38 @@ expandedVariant.y = 0;
 collapsedVariant.x = expandedVariant.x + expandedVariant.width + spacing;
 collapsedVariant.y = 0;
 
+// Prepare the variants with their properties
+expandedVariant.name = "Collapsed=False";
+collapsedVariant.name = "Collapsed=True";
+
 // Create the component set
 const componentSet = figma.combineAsVariants([expandedVariant, collapsedVariant], figma.currentPage);
 componentSet.name = "[PX] SideNav-MySideNav";
 componentSet.layoutMode = "HORIZONTAL";
 componentSet.counterAxisSizingMode = "AUTO";
-componentSet.itemSpacing = spacing;
+
+// Add the boolean property for controlling the collapsed state
+componentSet.addComponentProperty("Collapsed", "BOOLEAN", false);
+
+// Add consistent spacing around variants
+componentSet.itemSpacing = 16;
+componentSet.paddingLeft = 16;
+componentSet.paddingRight = 16;
+componentSet.paddingTop = 16;
+componentSet.paddingBottom = 16;
+
+// Add a purple dashed border to visually group variants
+componentSet.strokes = [{
+    type: "SOLID",
+    color: { 
+        r: parseInt("97", 16) / 255,
+        g: parseInt("47", 16) / 255,
+        b: parseInt("FF", 16) / 255
+    }
+}];
+componentSet.strokeWeight = 1;
+componentSet.dashPattern = [10, 5];
+componentSet.strokeAlign = "INSIDE";
 
 // Select all created components and notify user
 figma.currentPage.selection = [...createdComponentSets, navComponent, componentSet];
