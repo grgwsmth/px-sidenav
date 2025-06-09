@@ -20,7 +20,8 @@ interface NavData {
 // that will be used as templates for creating navigation elements
 const COMPONENT_KEYS = {
 	PARENT_LINK: "13c44fe13f8dde5e2b71e7396b8cec831e61113d",
-	CHILD_LINK: "24def9ec4389e2bb91bc2d29298a608e3bf9d7cd"
+	CHILD_LINK: "24def9ec4389e2bb91bc2d29298a608e3bf9d7cd",
+	SIDENAV_CONTROL: "b8327907713d76a0d44fb8783d93553f81b082fa"
 };
 
 // Object that maps node IDs to their SceneNode instances. This gets populated
@@ -398,23 +399,45 @@ async function createNavigation(data: NavData) {
 
 		// Create the final wrapped component that users will instance
 		const mySideNavInstance = navComponent.createInstance();
+		const sidenavControlInstance = await figma.importComponentByKeyAsync(COMPONENT_KEYS.SIDENAV_CONTROL);
+		
+		if (!sidenavControlInstance) {
+			throw new Error('Required SIDENAV_CONTROL component not found in library');
+		}
+
 		const wrapperComponent = figma.createComponent();
 		wrapperComponent.name = "[PX] SideNav-MySideNav";
 		wrapperComponent.layoutMode = "VERTICAL";
-		wrapperComponent.resize(240, wrapperComponent.height);
-		wrapperComponent.primaryAxisSizingMode = "AUTO";
-		wrapperComponent.counterAxisSizingMode = "FIXED";
-		wrapperComponent.itemSpacing = 0;
-		wrapperComponent.paddingLeft = 0;
-		wrapperComponent.paddingRight = 0;
-		wrapperComponent.paddingTop = 0;
-		wrapperComponent.paddingBottom = 0;
+		wrapperComponent.primaryAxisSizingMode = "FIXED"; // Height: Fixed 800px
+		wrapperComponent.counterAxisSizingMode = "AUTO"; // Width: Hug contents
+		wrapperComponent.layoutAlign = "STRETCH"; // Ensure children stretch to fill width
+		wrapperComponent.primaryAxisAlignItems = "SPACE_BETWEEN"; // Set vertical gap to Auto between objects
+		wrapperComponent.paddingLeft = 16;
+		wrapperComponent.paddingRight = 16;
+		wrapperComponent.paddingTop = 16;
+		wrapperComponent.paddingBottom = 16;
 		wrapperComponent.fills = [];
+		wrapperComponent.resize(wrapperComponent.width, 600); // Set height to 600px
 
+		// Add MySideNav instance and ensure it maintains its width
 		if (mySideNavInstance.type === "INSTANCE") {
-			mySideNavInstance.layoutAlign = "STRETCH";
+			mySideNavInstance.layoutAlign = "INHERIT"; // Allow it to maintain its natural width
+			mySideNavInstance.resize(240, mySideNavInstance.height); // Ensure 240px width
 		}
 		wrapperComponent.appendChild(mySideNavInstance);
+
+		// Add SIDENAV_CONTROL instance
+		const controlInstance = sidenavControlInstance.createInstance();
+		if (controlInstance.type === "INSTANCE") {
+			controlInstance.layoutAlign = "STRETCH"; // Make control stretch to match parent width
+		}
+		wrapperComponent.appendChild(controlInstance);
+
+		// Set the wrapper width to match the MySideNav width plus padding
+		const contentWidth = 240; // MySideNav width
+		const totalWidth = contentWidth + wrapperComponent.paddingLeft + wrapperComponent.paddingRight;
+		wrapperComponent.resize(totalWidth, wrapperComponent.height);
+
 		wrapperComponent.x = navComponent.x + navComponent.width + spacing;
 		wrapperComponent.y = 0;
 
@@ -484,6 +507,3 @@ async function inspectSelectedComponent() {
 		});
 	}
 }
-
-// Run the component inspection when the plugin starts
-inspectSelectedComponent();
