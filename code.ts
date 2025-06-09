@@ -397,53 +397,175 @@ async function createNavigation(data: NavData) {
 		navComponent.y = instancesFrame.y;
 		instancesFrame.remove();
 
-		// Create the final wrapped component that users will instance
-		const mySideNavInstance = navComponent.createInstance();
-		const sidenavControlInstance = await figma.importComponentByKeyAsync(COMPONENT_KEYS.SIDENAV_CONTROL);
-		
-		if (!sidenavControlInstance) {
-			throw new Error('Required SIDENAV_CONTROL component not found in library');
-		}
+		// Create the final wrapped component set with two variants
+const mySideNavInstance = navComponent.createInstance();
+const sidenavControlInstance = await figma.importComponentByKeyAsync(COMPONENT_KEYS.SIDENAV_CONTROL);
 
-		const wrapperComponent = figma.createComponent();
-		wrapperComponent.name = "[PX] SideNav-MySideNav";
-		wrapperComponent.layoutMode = "VERTICAL";
-		wrapperComponent.primaryAxisSizingMode = "FIXED"; // Height: Fixed 800px
-		wrapperComponent.counterAxisSizingMode = "AUTO"; // Width: Hug contents
-		wrapperComponent.layoutAlign = "STRETCH"; // Ensure children stretch to fill width
-		wrapperComponent.primaryAxisAlignItems = "SPACE_BETWEEN"; // Set vertical gap to Auto between objects
-		wrapperComponent.paddingLeft = 16;
-		wrapperComponent.paddingRight = 16;
-		wrapperComponent.paddingTop = 16;
-		wrapperComponent.paddingBottom = 16;
-		wrapperComponent.fills = [];
-		wrapperComponent.resize(wrapperComponent.width, 600); // Set height to 600px
+if (!sidenavControlInstance) {
+    throw new Error('Required SIDENAV_CONTROL component not found in library');
+}
 
-		// Add MySideNav instance and ensure it maintains its width
-		if (mySideNavInstance.type === "INSTANCE") {
-			mySideNavInstance.layoutAlign = "INHERIT"; // Allow it to maintain its natural width
-			mySideNavInstance.resize(240, mySideNavInstance.height); // Ensure 240px width
-		}
-		wrapperComponent.appendChild(mySideNavInstance);
+// Create the expanded variant (Collapsed=False)
+const expandedVariant = figma.createComponent();
+expandedVariant.name = "[PX] SideNav-MySideNav";
+expandedVariant.layoutMode = "VERTICAL";
+expandedVariant.primaryAxisSizingMode = "FIXED"; // Height: Fixed 800px
+expandedVariant.counterAxisSizingMode = "FIXED"; // Width: Fixed 240px
+expandedVariant.layoutAlign = "STRETCH"; // Ensure children stretch to fill width
+expandedVariant.primaryAxisAlignItems = "SPACE_BETWEEN"; // Set vertical gap to Auto between objects
+expandedVariant.paddingLeft = 16;
+expandedVariant.paddingRight = 16;
+expandedVariant.paddingTop = 16;
+expandedVariant.paddingBottom = 16;
 
-		// Add SIDENAV_CONTROL instance
-		const controlInstance = sidenavControlInstance.createInstance();
-		if (controlInstance.type === "INSTANCE") {
-			controlInstance.layoutAlign = "STRETCH"; // Make control stretch to match parent width
-		}
-		wrapperComponent.appendChild(controlInstance);
+// Create the collapsed variant (Collapsed=True)
+const collapsedVariant = figma.createComponent();
+collapsedVariant.name = "[PX] SideNav-MySideNav";
+collapsedVariant.layoutMode = "VERTICAL";
+collapsedVariant.primaryAxisSizingMode = "FIXED"; // Height: Fixed 800px
+collapsedVariant.counterAxisSizingMode = "AUTO"; // Width: Hug contents
+collapsedVariant.layoutAlign = "STRETCH"; // Ensure children stretch to fill width
+collapsedVariant.primaryAxisAlignItems = "SPACE_BETWEEN"; // Set vertical gap to Auto between objects
+collapsedVariant.paddingLeft = 16;
+collapsedVariant.paddingRight = 16;
+collapsedVariant.paddingTop = 16;
+collapsedVariant.paddingBottom = 16;
+		// Get the surface design token from the LD Design Tokens library
+try {
+    // Get all available library design token collections
+    const libraryCollections = await figma.teamLibrary.getAvailableLibraryVariableCollectionsAsync();
+    console.log("Available collections:", libraryCollections.map(c => c.name));
 
-		// Set the wrapper width to match the MySideNav width plus padding
-		const contentWidth = 240; // MySideNav width
-		const totalWidth = contentWidth + wrapperComponent.paddingLeft + wrapperComponent.paddingRight;
-		wrapperComponent.resize(totalWidth, wrapperComponent.height);
+    // Find the LD Design Tokens collection
+    const livingDesignCollection = libraryCollections.find(c => c.name === "LD Design Tokens");
 
-		wrapperComponent.x = navComponent.x + navComponent.width + spacing;
-		wrapperComponent.y = 0;
+    if (livingDesignCollection) {
+        // Get all design tokens from this collection
+        console.log("Found Living Design collection:", livingDesignCollection.name);
+        const libraryTokens = await figma.teamLibrary.getVariablesInLibraryCollectionAsync(livingDesignCollection.key);
+        console.log("Available tokens:", libraryTokens.map(v => v.name));
 
-		// Select all created components and notify user
-		figma.currentPage.selection = [...createdComponentSets, navComponent, wrapperComponent];
-		figma.notify(`Created ${createdComponentSets.length} navigation components and assembled them into a navigation system! 🎉`);
+        // Find the surface design token
+        const surfaceToken = libraryTokens.find(v => v.name === "ld/semantic/color/surface");
+        if (surfaceToken) {
+            console.log("Found surface token:", surfaceToken);
+        } else {
+            console.log("Available token names:", libraryTokens.map(v => v.name));
+        }
+
+        if (surfaceToken) {
+            // Import the design token using its key
+            const importedToken = await figma.variables.importVariableByKeyAsync(surfaceToken.key);
+
+            // First set a temporary fill
+            const tempFill: SolidPaint = {
+                type: "SOLID",
+                color: { r: 0, g: 0, b: 0 }
+            };
+
+            // Apply to expanded variant
+            expandedVariant.fills = [tempFill];
+            const expandedFillsCopy = [...expandedVariant.fills] as SolidPaint[];
+            expandedFillsCopy[0] = figma.variables.setBoundVariableForPaint(expandedFillsCopy[0], "color", importedToken);
+            expandedVariant.fills = expandedFillsCopy;
+
+            // Apply to collapsed variant
+            collapsedVariant.fills = [tempFill];
+            const collapsedFillsCopy = [...collapsedVariant.fills] as SolidPaint[];
+            collapsedFillsCopy[0] = figma.variables.setBoundVariableForPaint(collapsedFillsCopy[0], "color", importedToken);
+            collapsedVariant.fills = collapsedFillsCopy;
+        } else {
+            console.error("Could not find surface design token in LD Design Tokens");
+            // Fallback to white if design token not found
+            const fallbackFill: SolidPaint[] = [{
+                type: "SOLID",
+                color: { r: 12/255, g: 12/255, b: 12/255 }
+            }];
+            expandedVariant.fills = fallbackFill;
+            collapsedVariant.fills = fallbackFill;
+        }
+    } else {
+        console.error("Could not find LD Design Tokens collection");
+        // Fallback to white if collection not found
+        const fallbackFill: SolidPaint[] = [{
+            type: "SOLID",
+            color: { r: 1, g: 1, b: 1 }
+        }];
+        expandedVariant.fills = fallbackFill;
+        collapsedVariant.fills = fallbackFill;
+    }
+} catch (error) {
+    console.error("Error getting surface design token:", error);
+    // Fallback to white if there's an error
+    const fallbackFill: SolidPaint[] = [{
+        type: "SOLID",
+        color: { r: 1, g: 1, b: 1 }
+    }];
+    expandedVariant.fills = fallbackFill;
+    collapsedVariant.fills = fallbackFill;
+}
+
+// Set height for both variants
+expandedVariant.resize(expandedVariant.width, 800);
+collapsedVariant.resize(collapsedVariant.width, 800);
+
+// Add MySideNav instance to expanded variant
+const expandedSideNavInstance = mySideNavInstance.clone();
+if (expandedSideNavInstance.type === "INSTANCE") {
+    expandedSideNavInstance.layoutAlign = "STRETCH";
+    expandedSideNavInstance.resize(240, expandedSideNavInstance.height);
+}
+expandedVariant.appendChild(expandedSideNavInstance);
+
+// Add MySideNav instance to collapsed variant
+const collapsedSideNavInstance = mySideNavInstance.clone();
+if (collapsedSideNavInstance.type === "INSTANCE") {
+    collapsedSideNavInstance.layoutAlign = "STRETCH";
+    collapsedSideNavInstance.counterAxisSizingMode = "AUTO";
+    // Set all child instances to AUTO
+    collapsedSideNavInstance.findAll(node => node.type === "INSTANCE").forEach(instance => {
+        if (instance.type === "INSTANCE") {
+            instance.counterAxisSizingMode = "AUTO";
+        }
+    });
+}
+collapsedVariant.appendChild(collapsedSideNavInstance);
+
+// Add SIDENAV_CONTROL instance to both variants
+const expandedControlInstance = sidenavControlInstance.createInstance();
+if (expandedControlInstance.type === "INSTANCE") {
+    expandedControlInstance.layoutAlign = "STRETCH";
+}
+expandedVariant.appendChild(expandedControlInstance);
+
+const collapsedControlInstance = sidenavControlInstance.createInstance();
+if (collapsedControlInstance.type === "INSTANCE") {
+    collapsedControlInstance.layoutAlign = "STRETCH";
+    collapsedControlInstance.counterAxisSizingMode = "AUTO";
+}
+collapsedVariant.appendChild(collapsedControlInstance);
+
+// Set the expanded variant width
+const expandedContentWidth = 240;
+const expandedTotalWidth = expandedContentWidth + expandedVariant.paddingLeft + expandedVariant.paddingRight;
+expandedVariant.resize(expandedTotalWidth, expandedVariant.height);
+
+// Position the variants
+expandedVariant.x = navComponent.x + navComponent.width + spacing;
+expandedVariant.y = 0;
+collapsedVariant.x = expandedVariant.x + expandedVariant.width + spacing;
+collapsedVariant.y = 0;
+
+// Create the component set
+const componentSet = figma.combineAsVariants([expandedVariant, collapsedVariant], figma.currentPage);
+componentSet.name = "[PX] SideNav-MySideNav";
+componentSet.layoutMode = "HORIZONTAL";
+componentSet.counterAxisSizingMode = "AUTO";
+componentSet.itemSpacing = spacing;
+
+// Select all created components and notify user
+figma.currentPage.selection = [...createdComponentSets, navComponent, componentSet];
+figma.notify(`Created ${createdComponentSets.length} navigation components and assembled them into a navigation system! 🎉`);
 	} catch (error) {
 		console.error('Error creating navigation:', error);
 		figma.notify("Error: Could not create navigation. Check console for details.", { error: true });
@@ -455,7 +577,8 @@ async function createNavigation(data: NavData) {
 // - Basic properties (name, type, ID)
 // - Variant properties and states
 // - Text content
-// - Component hierarchy and relationships
+// - Component hierarchy and relationships	
+/*
 async function inspectSelectedComponent() {
 	// Verify a component is selected
 	if (figma.currentPage.selection.length === 0) {
@@ -507,3 +630,4 @@ async function inspectSelectedComponent() {
 		});
 	}
 }
+*/
