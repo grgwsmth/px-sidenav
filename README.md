@@ -8,11 +8,8 @@ https://www.figma.com/plugin-docs/plugin-quickstart-guide/
 
 #### Get started
 
-Install dependencies:
-`npm install`
+Install dependencies: `npm install`  
 
-Typescript foo:
-`npm run build`
+Typescript foo: `npm run build`  
 
-Run it and watch it:
-`npm run watch`
+Run it and watch it: `npm run watch`
