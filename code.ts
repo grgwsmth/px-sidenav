@@ -522,8 +522,19 @@ expandedVariant.appendChild(expandedSideNavInstance);
 // Add MySideNav instance to collapsed variant
 const collapsedSideNavInstance = mySideNavInstance.clone();
 if (collapsedSideNavInstance.type === "INSTANCE") {
-    collapsedSideNavInstance.layoutAlign = "STRETCH";
-    collapsedSideNavInstance.counterAxisSizingMode = "AUTO";
+    collapsedSideNavInstance.counterAxisSizingMode = "AUTO"; // Set to Hug
+    
+    // Get the first SideNav Item instance
+    const firstSideNavItem = collapsedSideNavInstance.findOne(node => 
+        node.type === "INSTANCE" && node.name.includes("[PX] SideNav Item")
+    ) as InstanceNode;
+    
+    if (firstSideNavItem) {
+        firstSideNavItem.setProperties({
+            "Collapsed": "True"
+        });
+    }
+    
     // Set all child instances to AUTO
     collapsedSideNavInstance.findAll(node => node.type === "INSTANCE").forEach(instance => {
         if (instance.type === "INSTANCE") {
@@ -543,7 +554,13 @@ expandedVariant.appendChild(expandedControlInstance);
 const collapsedControlInstance = sidenavControlInstance.createInstance();
 if (collapsedControlInstance.type === "INSTANCE") {
     collapsedControlInstance.layoutAlign = "STRETCH";
-    collapsedControlInstance.counterAxisSizingMode = "AUTO";
+    collapsedControlInstance.counterAxisSizingMode = "AUTO"; // Set to Hug
+    // Set all child instances to AUTO
+    collapsedControlInstance.findAll(node => node.type === "INSTANCE").forEach(instance => {
+        if (instance.type === "INSTANCE") {
+            instance.counterAxisSizingMode = "AUTO";
+        }
+    });
 }
 collapsedVariant.appendChild(collapsedControlInstance);
 
