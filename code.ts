@@ -168,7 +168,7 @@ async function createNavigation(data: NavData) {
 			if (parent.children && parent.children.length > 0) {
 				// Create the frame for when parent is selected
 				const parentCurrentFrame = figma.createFrame();
-				parentCurrentFrame.name = `Variant=${parent.label} Current`;
+				parentCurrentFrame.name = `Variant=${parent.label} current`;
 				parentCurrentFrame.layoutMode = "VERTICAL";
 				parentCurrentFrame.counterAxisSizingMode = "FIXED";
 				parentCurrentFrame.resize(240, parentCurrentFrame.height);
@@ -524,16 +524,16 @@ const collapsedSideNavInstance = mySideNavInstance.clone();
 if (collapsedSideNavInstance.type === "INSTANCE") {
     collapsedSideNavInstance.counterAxisSizingMode = "AUTO"; // Set to Hug
     
-    // Get the first SideNav Item instance
-    const firstSideNavItem = collapsedSideNavInstance.findOne(node => 
+    // Find all SideNav Item instances at any nesting level and set them to collapsed
+    const sideNavItems = collapsedSideNavInstance.findAll(node => 
         node.type === "INSTANCE" && node.name.includes("[PX] SideNav Item")
-    ) as InstanceNode;
+    ) as InstanceNode[];
     
-    if (firstSideNavItem) {
-        firstSideNavItem.setProperties({
+    sideNavItems.forEach(item => {
+        item.setProperties({
             "Collapsed": "True"
         });
-    }
+    });
     
     // Set all child instances to AUTO
     collapsedSideNavInstance.findAll(node => node.type === "INSTANCE").forEach(instance => {
@@ -555,6 +555,10 @@ const collapsedControlInstance = sidenavControlInstance.createInstance();
 if (collapsedControlInstance.type === "INSTANCE") {
     collapsedControlInstance.layoutAlign = "STRETCH";
     collapsedControlInstance.counterAxisSizingMode = "AUTO"; // Set to Hug
+    // Set the Variant property to Expand-Closed
+    collapsedControlInstance.setProperties({
+        "Variant": "Expand-Closed"
+    });
     // Set all child instances to AUTO
     collapsedControlInstance.findAll(node => node.type === "INSTANCE").forEach(instance => {
         if (instance.type === "INSTANCE") {
@@ -586,7 +590,8 @@ collapsedVariant.name = "Collapsed=True";
 const componentSet = figma.combineAsVariants([expandedVariant, collapsedVariant], figma.currentPage);
 componentSet.name = "[PX] SideNav-MySideNav";
 componentSet.layoutMode = "HORIZONTAL";
-componentSet.counterAxisSizingMode = "AUTO";
+componentSet.counterAxisSizingMode = "FIXED";
+componentSet.resize(componentSet.width, 800); // Set fixed height to 800px
 
 // Add the boolean property for controlling the collapsed state
 componentSet.addComponentProperty("Collapsed", "BOOLEAN", false);
