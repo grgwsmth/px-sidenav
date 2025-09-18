@@ -875,7 +875,7 @@
 				});
 			});
 
-			parent.postMessage({
+			window.parent.postMessage({
 				pluginMessage: {
 					type: 'create-nav',
 					data: state.getAllData()
@@ -996,13 +996,13 @@
 			state.removeParent(parentId);
 			// Renumber remaining parents
 			state.renumberParents();
-			// Notify plugin
-			window.parent.postMessage({
-				pluginMessage: {
-					type: 'remove-parent',
-					parentId: parentId
-				}
-			}, '*');
+					// Notify plugin
+		window.parent.postMessage({
+			pluginMessage: {
+				type: 'remove-parent',
+				parentId: parentId
+			}
+		}, '*');
 		});
 	}
 

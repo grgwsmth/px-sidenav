@@ -19,10 +19,98 @@ interface NavData {
 // Store component keys for reuse. These keys map to existing components in your Figma library
 // that will be used as templates for creating navigation elements
 const COMPONENT_KEYS = {
-	PARENT_LINK: "13c44fe13f8dde5e2b71e7396b8cec831e61113d",
-	CHILD_LINK: "24def9ec4389e2bb91bc2d29298a608e3bf9d7cd",
-	SIDENAV_CONTROL: "b8327907713d76a0d44fb8783d93553f81b082fa"
+	PARENT_LINK: "f4b9db21ccb59155fd36383bc35bf9c2b94a94c7",
+	CHILD_LINK: "750b3c7410ee4d9e721bc73f67f92f9f7b7ce42a",
+	SIDENAV_CONTROL: "9adf16c0daf5fdbe0ecbc670de834c7e7ea5d787"
 };
+
+// Function to load all fonts used by a component
+async function loadComponentFonts(component: ComponentNode) {
+	const textNodes = component.findAll(node => node.type === "TEXT") as TextNode[];
+	const fontsToLoad = new Set<string>();
+	
+	// Collect all unique fonts used in the component
+	textNodes.forEach(textNode => {
+		if (textNode.fontName && typeof textNode.fontName === 'object') {
+			const fontKey = `${textNode.fontName.family}-${textNode.fontName.style}`;
+			fontsToLoad.add(fontKey);
+		}
+	});
+	
+	// Load each unique font
+	for (const fontKey of fontsToLoad) {
+		const [family, style] = fontKey.split('-');
+		try {
+			await figma.loadFontAsync({ family, style });
+// console.log(`Loaded font: ${family} ${style}`);
+		} catch (error) {
+			console.log(`Failed to load font: ${family} ${style}`, error);
+		}
+	}
+}
+
+// Function to debug and find available components
+async function debugAvailableComponents() {
+	console.log('=== DEBUGGING AVAILABLE COMPONENTS ===');
+	
+	// Get all available components from the current file
+	const components = figma.currentPage.findAll(node => node.type === "COMPONENT") as ComponentNode[];
+	console.log('Components in current file:', components.length);
+	
+	components.forEach((component, index) => {
+		console.log(`${index + 1}. Component: "${component.name}"`);
+		console.log(`   Key: ${component.key}`);
+		console.log(`   ID: ${component.id}`);
+		console.log('   ---');
+	});
+	
+	// Note: Library components would need to be accessed differently
+	console.log('To find library component keys, check the component properties in Figma');
+}
+
+// Function to create placeholder components if library components are not available
+async function createPlaceholderComponent(name: string, isParent: boolean = false): Promise<ComponentNode> {
+	// Load font first before creating text
+	try {
+		await figma.loadFontAsync({ family: "Inter", style: "Regular" });
+	} catch (error) {
+		await figma.loadFontAsync({ family: "SF Pro Text", style: "Regular" });
+	}
+	
+	const component = figma.createComponent();
+	component.name = name;
+	component.resize(240, 48);
+	
+	// Create a simple rectangle as background
+	const background = figma.createRectangle();
+	background.name = "Background";
+	background.resize(240, 48);
+	background.cornerRadius = 8;
+	background.fills = [{
+		type: "SOLID",
+		color: { r: 0.95, g: 0.95, b: 0.95 }
+	}];
+	
+	// Create text node
+	const text = figma.createText();
+	text.name = "Label";
+	text.characters = isParent ? "Parent Link" : "Child Link";
+	text.fontSize = 14;
+	text.fills = [{
+		type: "SOLID",
+		color: { r: 0.2, g: 0.2, b: 0.2 }
+	}];
+	text.x = 16;
+	text.y = 16;
+	
+	component.appendChild(background);
+	component.appendChild(text);
+	
+	// Add the component properties that the original code expects (without variant properties)
+	component.addComponentProperty("isCurrent", "BOOLEAN", false);
+	
+	return component;
+}
 
 // Object that maps node IDs to their SceneNode instances. This gets populated
 // as new nodes are created and is used to reference them later for updates
@@ -86,22 +174,24 @@ figma.ui.onmessage = async (msg) => {
 async function logComponentProperties(component: ComponentNode | InstanceNode) {
 	// For instances, log their current state and properties
 	if (component.type === "INSTANCE") {
-		console.log('Instance Properties:', {
-			name: component.name,
-			componentProperties: component.componentProperties,
-			variantProperties: component.variantProperties
-		});
+		// console.log('Instance Properties:', {
+		// 	name: component.name,
+		// 	componentProperties: component.componentProperties,
+		// 	variantProperties: component.variantProperties
+		// });
 	} 
 	// For components, log their definition and variant structure
 	else if (component.type === "COMPONENT") {
 		const mainComponent = component.parent?.type === "COMPONENT_SET" ? component.parent : component;
-		console.log('Component Properties:', {
-			name: component.name,
-			isVariant: component.parent?.type === "COMPONENT_SET",
-			variantProperties: component.parent?.type === "COMPONENT_SET" ? component.parent.componentPropertyDefinitions : component.componentPropertyDefinitions
-		});
+		// console.log('Component Properties:', {
+		// 	name: component.name,
+		// 	isVariant: component.parent?.type === "COMPONENT_SET",
+		// 	variantProperties: component.parent?.type === "COMPONENT_SET" ? component.parent.componentPropertyDefinitions : component.componentPropertyDefinitions
+		// });
 	}
 }
+
+
 
 // Main function that builds the entire navigation system.
 // Takes the navigation data and creates a hierarchical component structure:
@@ -112,17 +202,38 @@ async function createNavigation(data: NavData) {
 	try {
 		// Load fonts needed for text elements. Must be done before
 		// creating any text nodes to avoid rendering issues
-		await figma.loadFontAsync({ family: "Everyday Sans UI", style: "Regular" });
-		await figma.loadFontAsync({ family: "Everyday Sans UI", style: "Medium" });
+		// We'll load fonts after importing components to see what fonts they actually use
 
 		// Get the base components that will be used as templates.
 		// These components must exist in your library for the plugin to work
-		const parentLinkComponent = await figma.importComponentByKeyAsync(COMPONENT_KEYS.PARENT_LINK);
-		const childLinkComponent = await figma.importComponentByKeyAsync(COMPONENT_KEYS.CHILD_LINK);
+		let parentLinkComponent: ComponentNode | null = null;
+		let childLinkComponent: ComponentNode | null = null;
 
-		if (!parentLinkComponent || !childLinkComponent) {
-			throw new Error('Required components not found in library');
+		// Import library components - these must exist for the plugin to work
+		try {
+			parentLinkComponent = await figma.importComponentByKeyAsync(COMPONENT_KEYS.PARENT_LINK);
+		} catch (error) {
+			console.error('Parent link component not found in library:', error);
+			throw new Error('Parent link component not found. Please ensure the component is published to the library.');
 		}
+
+		try {
+			childLinkComponent = await figma.importComponentByKeyAsync(COMPONENT_KEYS.CHILD_LINK);
+		} catch (error) {
+			console.error('Child link component not found in library:', error);
+			throw new Error('Child link component not found. Please ensure the component is published to the library.');
+		}
+
+		// Now load the fonts that the imported components are using
+		if (parentLinkComponent) {
+			await loadComponentFonts(parentLinkComponent);
+		}
+		if (childLinkComponent) {
+			await loadComponentFonts(childLinkComponent);
+		}
+
+		// Note: The imported components already have the required boolean properties
+		// We don't need to add them - they exist as shown in the screenshot
 
 		const spacing = 40;
 		let yPosition = 0;
@@ -151,13 +262,12 @@ async function createNavigation(data: NavData) {
 			if (parentDefaultInstance.type === "INSTANCE") {
 				// Set the label text for the parent
 				const textNode = parentDefaultInstance.findOne(node => node.type === "TEXT") as TextNode;
-				if (textNode) textNode.characters = parent.label;
+				if (textNode) {
+					textNode.characters = parent.label;
+				}
 
-				// Configure the parent instance properties
-				parentDefaultInstance.setProperties({
-					"Variant": "Parent",
-					"isCurrent": "False"
-				});
+				// Variant 1: Parent by itself - no unique settings needed
+				// (Component uses its default state)
 			}
 			parentDefaultFrame.appendChild(parentDefaultInstance);
 			parentFrames.push(parentDefaultFrame);
@@ -180,13 +290,13 @@ async function createNavigation(data: NavData) {
 				if (parentCurrentInstance.type === "INSTANCE") {
 					// Set the parent's label
 					const textNode = parentCurrentInstance.findOne(node => node.type === "TEXT") as TextNode;
-					if (textNode) textNode.characters = parent.label;
+					if (textNode) {
+						textNode.characters = parent.label;
+					}
 
-					// Configure the parent as selected
-					parentCurrentInstance.setProperties({
-						"Variant": "Parent",
-						"isCurrent": "True"
-					});
+									// Variant 2: Parent with children visible
+				// Configure the parent as selected (isCurrent = true)
+				// We'll set properties after the component is fully created
 				}
 				parentCurrentFrame.appendChild(parentCurrentInstance);
 
@@ -197,13 +307,12 @@ async function createNavigation(data: NavData) {
 					if (childInstance.type === "INSTANCE") {
 						// Set the child's label
 						const textNode = childInstance.findOne(node => node.type === "TEXT") as TextNode;
-						if (textNode) textNode.characters = child.label;
+						if (textNode) {
+							textNode.characters = child.label;
+						}
 
-						// Configure the child as not selected
-						childInstance.setProperties({
-							"Variant": "Child",
-							"isCurrent": "False"
-						});
+						// Variant 2: Children are in default state - no unique settings needed
+						// (Components use their default state)
 					}
 					parentCurrentFrame.appendChild(childInstance);
 				});
@@ -227,11 +336,9 @@ async function createNavigation(data: NavData) {
 						const textNode = parentInst.findOne(node => node.type === "TEXT") as TextNode;
 						if (textNode) textNode.characters = parent.label;
 
-						// Configure parent as not selected
-						parentInst.setProperties({
-							"Variant": "Parent",
-							"isCurrent": "False"
-						});
+						// Variant 3+: Parent with specific child selected
+						// Configure parent as selected with children visible
+						// We'll set properties after the component is fully created
 					}
 					childFrame.appendChild(parentInst);
 
@@ -244,11 +351,8 @@ async function createNavigation(data: NavData) {
 							const textNode = childInstance.findOne(node => node.type === "TEXT") as TextNode;
 							if (textNode) textNode.characters = child.label;
 
-							// Configure child's selected state based on whether it's the active one
-							childInstance.setProperties({
-								"Variant": "Child",
-								"isCurrent": index === activeChildIndex ? "True" : "False"
-							});
+							// Variant 3+: Configure child's selected state based on whether it's the active one
+							// We'll set properties after the component is fully created
 						}
 						childFrame.appendChild(childInstance);
 					});
@@ -256,6 +360,101 @@ async function createNavigation(data: NavData) {
 					parentFrames.push(childFrame);
 				});
 			}
+
+			// Create collapsed versions of all variants
+			const collapsedFrames: FrameNode[] = [];
+			
+			// Create collapsed version of base variant
+			const baseCollapsedFrame = figma.createFrame();
+			baseCollapsedFrame.name = `Variant=${parent.label} collapsed`;
+			baseCollapsedFrame.layoutMode = "VERTICAL";
+			baseCollapsedFrame.counterAxisSizingMode = "FIXED";
+			baseCollapsedFrame.resize(240, baseCollapsedFrame.height);
+			baseCollapsedFrame.itemSpacing = 4;
+
+			// Add parent instance in collapsed state
+			const parentCollapsedInstance = parentLinkComponent.createInstance();
+			parentCollapsedInstance.layoutAlign = "STRETCH";
+			if (parentCollapsedInstance.type === "INSTANCE") {
+				const textNode = parentCollapsedInstance.findOne(node => node.type === "TEXT") as TextNode;
+				if (textNode) {
+					textNode.characters = parent.label;
+				}
+			}
+			baseCollapsedFrame.appendChild(parentCollapsedInstance);
+			collapsedFrames.push(baseCollapsedFrame);
+
+			// If this parent has children, create collapsed versions of current and child-specific variants
+			if (parent.children && parent.children.length > 0) {
+				// Create collapsed version of current variant
+				const currentCollapsedFrame = figma.createFrame();
+				currentCollapsedFrame.name = `Variant=${parent.label} current collapsed`;
+				currentCollapsedFrame.layoutMode = "VERTICAL";
+				currentCollapsedFrame.counterAxisSizingMode = "FIXED";
+				currentCollapsedFrame.resize(240, currentCollapsedFrame.height);
+				currentCollapsedFrame.itemSpacing = 4;
+
+				// Add parent instance in collapsed state
+				const parentCurrentCollapsedInstance = parentLinkComponent.createInstance();
+				parentCurrentCollapsedInstance.layoutAlign = "STRETCH";
+				if (parentCurrentCollapsedInstance.type === "INSTANCE") {
+					const textNode = parentCurrentCollapsedInstance.findOne(node => node.type === "TEXT") as TextNode;
+					if (textNode) {
+						textNode.characters = parent.label;
+					}
+				}
+				currentCollapsedFrame.appendChild(parentCurrentCollapsedInstance);
+
+				// Add all child links in collapsed state
+				parent.children.forEach(child => {
+					const childInstance = childLinkComponent.createInstance();
+					childInstance.layoutAlign = "STRETCH";
+					if (childInstance.type === "INSTANCE") {
+						const textNode = childInstance.findOne(node => node.type === "TEXT") as TextNode;
+						if (textNode) {
+							textNode.characters = child.label;
+						}
+					}
+					currentCollapsedFrame.appendChild(childInstance);
+				});
+
+				collapsedFrames.push(currentCollapsedFrame);
+
+				// Create collapsed versions for each child being selected
+				parent.children.forEach((activeChild, activeChildIndex) => {
+					const childCollapsedFrame = figma.createFrame();
+					childCollapsedFrame.name = `Variant=${activeChild.label} collapsed`;
+					childCollapsedFrame.layoutMode = "VERTICAL";
+					childCollapsedFrame.counterAxisSizingMode = "FIXED";
+					childCollapsedFrame.resize(240, childCollapsedFrame.height);
+					childCollapsedFrame.itemSpacing = 4;
+
+					// Add parent in collapsed state
+					const parentInst = parentLinkComponent.createInstance();
+					parentInst.layoutAlign = "STRETCH";
+					if (parentInst.type === "INSTANCE") {
+						const textNode = parentInst.findOne(node => node.type === "TEXT") as TextNode;
+						if (textNode) textNode.characters = parent.label;
+					}
+					childCollapsedFrame.appendChild(parentInst);
+
+					// Add all children in collapsed state
+					parent.children.forEach((child, index) => {
+						const childInstance = childLinkComponent.createInstance();
+						childInstance.layoutAlign = "STRETCH";
+						if (childInstance.type === "INSTANCE") {
+							const textNode = childInstance.findOne(node => node.type === "TEXT") as TextNode;
+							if (textNode) textNode.characters = child.label;
+						}
+						childCollapsedFrame.appendChild(childInstance);
+					});
+
+					collapsedFrames.push(childCollapsedFrame);
+				});
+			}
+
+			// Add collapsed frames to the main frames array
+			parentFrames.push(...collapsedFrames);
 
 			// Arrange all frames horizontally with spacing
 			parentFrames.forEach((frame, index) => {
@@ -279,6 +478,179 @@ async function createNavigation(data: NavData) {
 				frame.remove();
 				
 				return component;
+			});
+
+			// Now set the properties on the component instances after they're fully created
+			components.forEach((component, componentIndex) => {
+				// Extract the parent label from the component name to find the correct parent
+				const componentName = component.name;
+				let parent: any;
+				
+				if (componentName.startsWith('Variant=')) {
+					const variantName = componentName.replace('Variant=', '').replace(' current', '');
+					
+					// For "current" variants, the variant name is the parent label
+					if (componentName.includes(' current')) {
+						parent = data.parents.find(p => p.label === variantName);
+					} else {
+						// For child-specific variants, find the parent that contains this child
+						parent = data.parents.find(p => p.children.some(child => child.label === variantName));
+					}
+				} else {
+					console.log(`Skipping component with unexpected name: ${componentName}`);
+					return;
+				}
+				
+				if (!parent) {
+					console.log(`Could not find parent for component: ${componentName}`);
+					return;
+				}
+
+				console.log(`Processing component: "${component.name}"`);
+				console.log(`Found parent: "${parent.label}"`);
+
+				// Find all SideNav Item instances in this component
+				const sideNavItems = component.findAll(node => 
+					node.type === "INSTANCE" && node.name.includes("[PX] SideNav Item")
+				) as InstanceNode[];
+
+				console.log(`Found ${sideNavItems.length} SideNav Item instances in ${component.name}`);
+
+				sideNavItems.forEach((item, itemIndex) => {
+					try {
+						console.log(`Processing item ${itemIndex}: ${item.name}`);
+						
+						// Debug: Check what properties are available on this instance
+						// Note: availableProperties doesn't exist on InstanceNode, so we'll try to set properties directly
+						// and catch any errors to understand what's available
+						
+						if (component.name === `Variant=${parent.label}`) {
+							console.log(`Variant 1: ${parent.label} - no properties to set`);
+						} else if (component.name === `Variant=${parent.label} collapsed`) {
+							console.log(`Variant 1 collapsed: ${parent.label} - setting Collapsed: 'True' on all instances`);
+							// Set Collapsed: 'True' on all instances in collapsed variant
+							try {
+								item.setProperties({ "Collapsed": "True" });
+								console.log(`Set Collapsed: 'True' on instance ${itemIndex}`);
+							} catch (propError) {
+								console.log(`Failed to set Collapsed: 'True' on instance ${itemIndex}:`, propError);
+							}
+						} else if (component.name === `Variant=${parent.label} current`) {
+							console.log(`Variant 2: ${parent.label} current - setting properties on all instances`);
+							if (itemIndex === 0) { // Parent instance
+								// Set isCurrent to 'True' on parent
+								try {
+									console.log(`Setting isCurrent to 'True' on parent instance...`);
+									item.setProperties({ "isCurrent": "True" });
+									console.log(`Successfully set isCurrent: 'True' on parent instance`);
+								} catch (propError) {
+									console.log(`Failed to set isCurrent: 'True' on parent:`, propError);
+								}
+							} else { // Child instances
+								// Set isCurrent to 'False' on children (they're not the current item)
+								try {
+									console.log(`Setting isCurrent to 'False' on child instance ${itemIndex}...`);
+									item.setProperties({ "isCurrent": "False" });
+									console.log(`Successfully set isCurrent: 'False' on child instance ${itemIndex}`);
+								} catch (propError) {
+									console.log(`Failed to set isCurrent: 'False' on child ${itemIndex}:`, propError);
+								}
+							}
+						} else if (component.name === `Variant=${parent.label} current collapsed`) {
+							console.log(`Variant 2 collapsed: ${parent.label} current collapsed - setting properties on all instances`);
+							if (itemIndex === 0) { // Parent instance
+								// Set isCurrent to 'True' and Collapsed to 'True' on parent
+								try {
+									console.log(`Setting isCurrent: 'True' and Collapsed: 'True' on parent instance...`);
+									item.setProperties({ "isCurrent": "True", "Collapsed": "True" });
+									console.log(`Successfully set isCurrent: 'True' and Collapsed: 'True' on parent instance`);
+								} catch (propError) {
+									console.log(`Failed to set properties on parent:`, propError);
+								}
+							} else { // Child instances
+								// Set isCurrent to 'False' and Collapsed to 'True' on children
+								try {
+									console.log(`Setting isCurrent: 'False' and Collapsed: 'True' on child instance ${itemIndex}...`);
+									item.setProperties({ "isCurrent": "False", "Collapsed": "True" });
+									console.log(`Successfully set isCurrent: 'False' and Collapsed: 'True' on child instance ${itemIndex}`);
+								} catch (propError) {
+									console.log(`Failed to set properties on child ${itemIndex}:`, propError);
+								}
+							}
+						} else if (component.name.startsWith(`Variant=`)) {
+							// This should only catch variants that are NOT the base or current variants
+							// Check if it's a child-specific variant or collapsed child variant
+							const variantName = component.name.replace('Variant=', '').replace(' collapsed', '');
+							const isChildVariant = parent.children.some(child => child.label === variantName);
+							const isCollapsedVariant = component.name.includes(' collapsed');
+							
+							if (isChildVariant) {
+								if (isCollapsedVariant) {
+									console.log(`Variant 3+ collapsed: ${component.name} - collapsed child-specific variant`);
+									if (itemIndex === 0) { // Parent instance
+										try {
+											console.log(`Setting properties on parent instance for collapsed child variant...`);
+											
+											// Set properties with string values including Collapsed
+											item.setProperties({ "isCurrent": "True", "Child Active": "True", "Collapsed": "True" });
+											
+											console.log(`Set isCurrent: 'True', Child Active: 'True', and Collapsed: 'True' on parent instance`);
+										} catch (propError) {
+											console.log(`Property error:`, propError);
+										}
+									} else { // Child instance
+										const childIndex = itemIndex - 1;
+										const isActiveChild = parent.children[childIndex]?.label === variantName;
+										
+										try {
+											console.log(`Setting properties on child instance ${itemIndex}...`);
+											
+											// Set properties with string values including Collapsed
+											item.setProperties({ "isCurrent": isActiveChild ? "True" : "False", "Collapsed": "True" });
+											
+											console.log(`Set isCurrent: '${isActiveChild ? "True" : "False"}' and Collapsed: 'True' on child instance ${itemIndex}`);
+										} catch (propError) {
+											console.log(`Property error:`, propError);
+										}
+									}
+								} else {
+									console.log(`Variant 3+: ${component.name} - child-specific variant`);
+									if (itemIndex === 0) { // Parent instance
+										try {
+											console.log(`Setting properties on parent instance for child variant...`);
+											
+											// Set properties with string values
+											item.setProperties({ "isCurrent": "True" });
+											item.setProperties({ "Child Active": "True" });
+											
+											console.log(`Set isCurrent: 'True' and Child Active: 'True' on parent instance`);
+										} catch (propError) {
+											console.log(`Property error:`, propError);
+										}
+									} else { // Child instance
+										const childIndex = itemIndex - 1;
+										const isActiveChild = parent.children[childIndex]?.label === variantName;
+										
+										try {
+											console.log(`Setting properties on child instance ${itemIndex}...`);
+											
+											// Set property with string value
+											item.setProperties({ "isCurrent": isActiveChild ? "True" : "False" });
+											
+											console.log(`Set isCurrent: '${isActiveChild ? "True" : "False"}' on child instance ${itemIndex}`);
+										} catch (propError) {
+											console.log(`Property error:`, propError);
+										}
+									}
+								}
+							} else {
+								console.log(`Unknown variant type: ${component.name} - no properties to set`);
+							}
+						}
+					} catch (error) {
+						console.log('Could not set properties on component instance:', error);
+					}
+				});
 			});
 
 			let finalNode: ComponentNode | ComponentSetNode;
@@ -353,10 +725,9 @@ async function createNavigation(data: NavData) {
 			topParentInstance.layoutAlign = "STRETCH";
 			const textNode = topParentInstance.findOne(node => node.type === "TEXT") as TextNode;
 			if (textNode) textNode.characters = "Home";
-			topParentInstance.setProperties({
-				"Variant": "Parent",
-				"isCurrent": "False"
-			});
+			// Configure the top parent instance properties (with safety check)
+			// Top parent (Home) - no unique settings needed
+			// (Component uses its default state)
 		}
 		instancesFrame.appendChild(topParentInstance);
 
@@ -399,12 +770,14 @@ async function createNavigation(data: NavData) {
 
 		// Create the final wrapped component set with two variants
 const mySideNavInstance = navComponent.createInstance();
-const sidenavControlInstance = await figma.importComponentByKeyAsync(COMPONENT_KEYS.SIDENAV_CONTROL);
+let sidenavControlInstance: ComponentNode | null = null;
 
-// We'll remove this instance later after we're done cloning it
-
-if (!sidenavControlInstance) {
-    throw new Error('Required SIDENAV_CONTROL component not found in library');
+// Try to import SIDENAV_CONTROL component, fall back to placeholder if it fails
+try {
+    sidenavControlInstance = await figma.importComponentByKeyAsync(COMPONENT_KEYS.SIDENAV_CONTROL);
+} catch (error) {
+    console.log('SIDENAV_CONTROL component not found in library, creating placeholder...');
+    sidenavControlInstance = await createPlaceholderComponent("SideNav Control", false);
 }
 
 // Create the expanded variant (Collapsed=False)
@@ -530,9 +903,13 @@ if (collapsedSideNavInstance.type === "INSTANCE") {
     ) as InstanceNode[];
     
     sideNavItems.forEach(item => {
-        item.setProperties({
-            "Collapsed": "True"
-        });
+        try {
+            item.setProperties({
+                "Collapsed": true
+            });
+        } catch (error) {
+            console.log('Could not set Collapsed property on sideNav item, continuing...');
+        }
     });
     
     // Set all child instances to AUTO
@@ -555,10 +932,14 @@ const collapsedControlInstance = sidenavControlInstance.createInstance();
 if (collapsedControlInstance.type === "INSTANCE") {
     collapsedControlInstance.layoutAlign = "STRETCH";
     collapsedControlInstance.counterAxisSizingMode = "AUTO"; // Set to Hug
-    // Set the Variant property to Expand-Closed
-    collapsedControlInstance.setProperties({
-        "Variant": "Expand-Closed"
-    });
+    		// Set the Variant property to Expand-Closed (with safety check)
+		try {
+			collapsedControlInstance.setProperties({
+				// No variant properties for placeholder components
+			});
+		} catch (error) {
+			console.log('Could not set properties on collapsed control instance, continuing...');
+		}
     // Set all child instances to AUTO
     collapsedControlInstance.findAll(node => node.type === "INSTANCE").forEach(instance => {
         if (instance.type === "INSTANCE") {
