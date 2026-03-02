@@ -810,7 +810,7 @@ if (collapsedSideNavInstance.type === "INSTANCE") {
     sideNavItems.forEach(item => {
         try {
             item.setProperties({
-                "Collapsed": true
+                "Collapsed": "True"
             });
         } catch (error) {
             console.log('Could not set Collapsed property on sideNav item, continuing...');
