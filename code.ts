@@ -840,7 +840,7 @@ if (collapsedControlInstance.type === "INSTANCE") {
     		// Set the Variant property to Expand-Closed (with safety check)
 		try {
 			collapsedControlInstance.setProperties({
-				// No variant properties for placeholder components
+				"Variant": "Expand-Closed"
 			});
 		} catch (error) {
 			console.log('Could not set properties on collapsed control instance, continuing...');
