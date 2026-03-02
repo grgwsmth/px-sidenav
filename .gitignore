@@ -1,8 +1,9 @@
+.DS_Store
 # Node
 *.log
 *.log.*
 node_modules
-
+# Files
 out/
 dist/
 code.js
